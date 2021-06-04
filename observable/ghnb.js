@@ -5,10 +5,19 @@ const test = async () => {
   const params = {
     context: {
       render: {
-        getContent: () => fs.readFileSync('./five-minute.md').toString()
+        getContent: (spec) => fs.readFileSync(`./${spec.path || 'five-minute.md'}`).toString()
       },
       target: {
-        url: 'https://github.com/foo/bar/scatter.md'
+        resource: {
+          owner: 'app-extensions', repo: 'test', path: 'five-minute.md', ref: 'main'
+        }
+      },
+      github: {
+        resolve: () => {
+          return {
+            owner: 'app-extensions', repo: 'test', path: 'scatter.md', ref: 'main'
+          }
+        }
       }
     },
     options: {}

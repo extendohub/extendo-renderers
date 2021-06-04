@@ -71,7 +71,8 @@ Each cell has the notions of `value`, `type`,  `view`
 
 In theory all are somehow optional. Clearly you can have a value (and content type) without a view. If you have a view, there was a value (and content type) but it may not be surfaced or exposed (e.g., it may be embedded in the view DOM in its rendered form)
 
-
+See some thoughts from @max
+https://gist.github.com/max/738c318b17ea47f5708a53c79493bd29
 
 * Default value renderer (derived from `js`). Content type = JSON
 ```\`\`\`{js(cars)}

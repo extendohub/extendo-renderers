@@ -17,9 +17,7 @@ const yaml = require('js-yaml')
 
 module.exports = async ({ options, context }) => {
   const content = await context.render.getContent({})
-  console.dir(context.target)
   const code = await generate(context, content, context.target.resource)
-  console.log(code)
   const encoded = Buffer.from(code).toString('base64');
   const stringModule = `data:text/javascript;base64,${encoded}`
   const script = `
@@ -93,7 +91,6 @@ function parseKeyValuePairs(spec) {
 async function generate(context, content, resource, level) {
   const { chunks } = parseMarkdown(content)
   const state = createState(context, resource, level)
-  console.dir(state)
   const code = generateBody(chunks, state)
   const preamble = await generatePreamble(state)
   const postamble = generatePostamble()
@@ -104,24 +101,27 @@ async function generatePreamble(state) {
   const importedModules = await captureImportedModules(state)
   return `
 // Imported modules
-${importedModules.trim()}
+${importedModules.map(entry => entry.code).join('\n').trim()}
 
 // Transpiled user markdown to JavaScript
-export default function define${state.level}(runtime, observer) {
-  const main = runtime.module()`.trim()
+export ${state.level ? ' ' : ' default '}function define${state.level}(runtime, observer) {
+  const main = runtime.module()
+  ${importedModules
+      .map(entry => entry.unique)
+      .map(unique => `  const child${unique} = runtime.module(define${unique})`)
+      .join('\n')
+    }
+  `.trim()
 }
 
-async function captureImportedModules(state) {
-  const entries = await Promise.all(state.modules.map(async (imported) => {
-    const resolved = state.context.github.resolve(imported.name, state.current)  
+function captureImportedModules(state) {
+  return Promise.all(state.modules.map(async (imported) => {
+    const resolved = state.context.github.resolve(imported.name, state.current)
     const content = await getModuleContent(resolved, state.context)
     const unique = state.level + imported.alias
     const generated = await generate(state.context, content, resolved, unique)
-    return `
-${generated}
-const child${unique} = runtime.module(define${unique})`.trim()
+    return { code: generated.trim(), unique }
   }))
-  return entries.join('\n')
 }
 
 function getModuleContent(location, context) {
@@ -191,10 +191,11 @@ function generateImports(chunk, state) {
     } else if (parsed.origin) {
       // TODO proper location resolution for imports include version/ref etc
       // This should really use the config registry code so content can come from apps, ...
-      const url = new URL(parsed.origin, state.url)
+      const { owner, repo, ref } = state.current
+      const url = `https://github.com/${owner}/${repo}/blob/${ref || 'main'}/${parsed.origin.replace('./', '')}?raw=true`
       result.push(`
-main.variable(observer("${parsed.alias}")).define("${parsed.alias}", function() { 
-  return fetch("${url.toString()}")
+main.variable(observer("${parsed.alias}")).define("${parsed.alias}", [], function() { 
+  return fetch("${url}")
 })`)
     }
     return result
