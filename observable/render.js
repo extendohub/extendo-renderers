@@ -17,8 +17,8 @@ const yaml = require('js-yaml')
 
 module.exports = async ({ options, context }) => {
   const content = await context.render.getContent({})
-  const code = await generate(context, content, context.target.resource)
   console.dir(context.target)
+  const code = await generate(context, content, context.target.resource)
   console.log(code)
   const encoded = Buffer.from(code).toString('base64');
   const stringModule = `data:text/javascript;base64,${encoded}`
@@ -93,6 +93,7 @@ function parseKeyValuePairs(spec) {
 async function generate(context, content, resource, level) {
   const { chunks } = parseMarkdown(content)
   const state = createState(context, resource, level)
+  console.dir(state)
   const code = generateBody(chunks, state)
   const preamble = await generatePreamble(state)
   const postamble = generatePostamble()
