@@ -18,6 +18,7 @@ const yaml = require('js-yaml')
 module.exports = async ({ options, context }) => {
   const content = await context.render.getContent({})
   const code = await generate(context, content, context.target.resource)
+  console.dir(context.target)
   console.log(code)
   const encoded = Buffer.from(code).toString('base64');
   const stringModule = `data:text/javascript;base64,${encoded}`
