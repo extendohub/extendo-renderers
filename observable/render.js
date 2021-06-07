@@ -18,6 +18,7 @@ const yaml = require('js-yaml')
 module.exports = async ({ options, context }) => {
   const content = await context.render.getContent({})
   const code = await generate(context, content, context.target.resource)
+  console.log(code)
   const encoded = Buffer.from(code).toString('base64');
   const stringModule = `data:text/javascript;base64,${encoded}`
   const script = `
@@ -59,15 +60,15 @@ function parseFrontmatterConfig(content) {
 }
 
 function discoverMarkdownChunks(content, namespace) {
-  const matches = [...content.matchAll(/```{([\w# ]+)}(?:\((.*?)\))?\n(.*?)```/gms)]
+  const matches = [...content.matchAll(/```{([\w# ]+)(?:\((.*?)\))?}(.*?)```/gms)]
   let index = 0
   const result = []
   for (const match of matches) {
     const markdown = content.slice(index, match.index).trim()
     if (markdown) result.push({ type: 'md', content: markdown })
     const [type, name] = match[1].split('#')
-    const args = parseKeyValuePairs(match[2])
-    const inputs = args && args.inputs ? args.inputs.split(';') : undefined
+    const args = match[2]
+    const inputs = args ? args.split(',') : undefined
     result.push({ type, name, inputs, content: match[3].trim() })
     index = match.index + match[0].length
   }
@@ -76,16 +77,6 @@ function discoverMarkdownChunks(content, namespace) {
     if (markdown) result.push({ type: 'md', content: markdown })
   }
   return result
-}
-
-function parseKeyValuePairs(spec) {
-  if (!spec) return {}
-  const pairs = spec.split(',')
-  return pairs.reduce((result, pair) => {
-    const [key, value] = pair.trim().split('=')
-    if (key) result[key] = value
-    return result
-  }, {})
 }
 
 async function generate(context, content, resource, level) {
@@ -104,14 +95,14 @@ async function generatePreamble(state) {
 ${importedModules.map(entry => entry.code).join('\n').trim()}
 
 // Transpiled user markdown to JavaScript
-export ${state.level ? ' ' : ' default '}function define${state.level}(runtime, observer) {
+export${state.level ? ' ' : ' default '}function define${state.level}(runtime, observer) {
   const main = runtime.module()
-  ${importedModules
-      .map(entry => entry.unique)
-      .map(unique => `  const child${unique} = runtime.module(define${unique})`)
-      .join('\n')
-    }
-  `.trim()
+${importedModules
+    .map(entry => entry.unique)
+    .map(unique => `  const child${unique} = runtime.module(define${unique})`)
+    .join('\n')
+  }
+`.trim()
 }
 
 function captureImportedModules(state) {
@@ -141,7 +132,7 @@ function createState(context, resource, level) {
 const generators = {
   md: generateMarkdown,
   html: generateHTML,
-  js: generateJavaScript,
+  javascript: generateJavaScript,
   imports: generateImports
 }
 
@@ -184,9 +175,8 @@ function generateImports(chunk, state) {
   return lines.reduce((result, line) => {
     const parsed = parseImportLine(line)
     if (parsed.module) {
-      const { isViewof, name, alias, module } = parsed
+      const { name, alias, module } = parsed
       const moduleEntry = getModuleEntry(module, state.modules)
-      if (isViewof) result.push(generateImport(name, alias, moduleEntry, true))
       result.push(generateImport(name, alias, moduleEntry))
     } else if (parsed.origin) {
       // TODO proper location resolution for imports include version/ref etc
@@ -202,7 +192,7 @@ main.variable(observer("${parsed.alias}")).define("${parsed.alias}", [], functio
   }, [])
 }
 
-// { viewof foo as bar } from xx
+// { [viewof] foo as [viewof] bar } from xx
 function parseImportLine(line) {
   const fromMatches = line.match(/{(.*?)}\s+from\s+(.*)/)
   if (fromMatches) return parseModuleImport(fromMatches)
@@ -212,12 +202,11 @@ function parseImportLine(line) {
 }
 
 function parseModuleImport(matches) {
-  const originParts = matches[1].match(/^\s?(viewof\s+)?(.+?)(?:(?:\s+as\s+(\w+))|$)/)
-  const isViewof = !!originParts[1]
-  const name = originParts[2]
-  const alias = originParts[3]
-  const module = matches[2]
-  return { name, alias, module, isViewof }
+  const originParts = matches[1].match(/^\s?(.+?)(?:(?:\s+as\s+([\w\s]+?)\s?$)|$)/)
+  const name = originParts[1]
+  const alias = originParts[2]
+  const module = matches[2].trim()
+  return { name, alias, module }
 }
 
 function parseLoadImport(matches) {
@@ -236,11 +225,10 @@ function getModuleEntry(name, list) {
   return newEntry
 }
 
-function generateImport(name, alias, module, isViewof) {
-  const nameString = isViewof ? `viewof ${name}` : name
-  const aliasString = alias ? (isViewof ? `"viewof ${alias}", ` : `"${alias}", `) : ''
+function generateImport(name, alias, module) {
+  const aliasString = alias ? `"${alias}", ` : ''
   return `
-main.import("${nameString}", ${aliasString}child${module.alias})`
+main.import("${name}", ${aliasString}child${module.alias})`
 }
 
 function analyzeJS(chunk, state) {
