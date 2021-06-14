@@ -21,15 +21,20 @@ module.exports = async ({ options, context }) => {
   console.log(code)
   const encoded = Buffer.from(code).toString('base64');
   const stringModule = `data:text/javascript;base64,${encoded}`
+  const { type, id, org, repo, path, ref } = context.target.resource
+  const targetString = JSON.stringify({ type, id, org, repo, path, ref })
   const script = `
-    <script type="module">
-      import { Runtime, Inspector } from "https://cdn.jsdelivr.net/npm/@observablehq/runtime@4/dist/runtime.js"
-      import('${stringModule}').then(notebook => {
-        const runtime = new Runtime()
-        runtime.module(notebook.default, Inspector.into(document.body))
-        window.parent.postMessage('loaded', '*')
-      })
-    </script>`
+  <script type="module">
+    import { Runtime, Inspector, Library } from "https://cdn.jsdelivr.net/npm/@observablehq/runtime@4/dist/runtime.js"
+    ${renderFunction(targetString)}
+    // console.log(browser)
+    const render = () => liveRender
+    import('${stringModule}').then(notebook => {
+      const runtime = new Runtime({...new Library(), render})
+      runtime.module(notebook.default, Inspector.into(document.body))
+      window.parent.postMessage('loaded', '*')
+    })
+  </script>`
   const html = `
 <html>
   <meta charset="utf-8">
@@ -98,10 +103,10 @@ ${importedModules.map(entry => entry.code).join('\n').trim()}
 export${state.level ? ' ' : ' default '}function define${state.level}(runtime, observer) {
   const main = runtime.module()
 ${importedModules
-    .map(entry => entry.unique)
-    .map(unique => `  const child${unique} = runtime.module(define${unique})`)
-    .join('\n')
-  }
+      .map(entry => entry.unique)
+      .map(unique => `  const child${unique} = runtime.module(define${unique})`)
+      .join('\n')
+    }
 `.trim()
 }
 
@@ -175,8 +180,9 @@ function generateImports(chunk, state) {
   return lines.reduce((result, line) => {
     const parsed = parseImportLine(line)
     if (parsed.module) {
-      const { name, alias, module } = parsed
+      const { name, alias, module, viewOf } = parsed
       const moduleEntry = getModuleEntry(module, state.modules)
+      if (isViewof) result.push(generateImport(name, alias, moduleEntry, true))
       result.push(generateImport(name, alias, moduleEntry))
     } else if (parsed.origin) {
       // TODO proper location resolution for imports include version/ref etc
@@ -202,11 +208,12 @@ function parseImportLine(line) {
 }
 
 function parseModuleImport(matches) {
-  const originParts = matches[1].match(/^\s?(.+?)(?:(?:\s+as\s+([\w\s]+?)\s?$)|$)/)
-  const name = originParts[1]
-  const alias = originParts[2]
-  const module = matches[2].trim()
-  return { name, alias, module }
+  const originParts = matches[1].match(/^\s?(viewof\s+)?(.+?)(?:(?:\s+as\s+(\w+))|$)/)
+  const isViewof = !!originParts[1]
+  const name = originParts[2]
+  const alias = originParts[3]
+  const module = matches[2]
+  return { name, alias, module, isViewof }
 }
 
 function parseLoadImport(matches) {
@@ -225,10 +232,11 @@ function getModuleEntry(name, list) {
   return newEntry
 }
 
-function generateImport(name, alias, module) {
-  const aliasString = alias ? `"${alias}", ` : ''
+function generateImport(name, alias, module, isViewOf) {
+  const nameString = isViewof ? `viewof ${name}` : name
+  const aliasString = alias ? (isViewof ? `"viewof ${alias}", ` : `"${alias}", `) : ''
   return `
-main.import("${name}", ${aliasString}child${module.alias})`
+main.import("${nameString}", ${aliasString}child${module.alias})`
 }
 
 function analyzeJS(chunk, state) {
@@ -242,7 +250,67 @@ function generateVariable(name, inputs, content, type, characters = {}) {
   const inputArgs = inputs.map(i => i.replace(/ /g, '_')).join(', ')
   const nameString = name ? `"${name}"` : ''
   const functionKeyword = `${characters.isAsync ? 'async ' : ''}function${characters.isGenerator ? '*' : ''}`
-  return `
-main.variable(observer(${nameString})).define(${nameString}${name ? ', ' : ''}[${inputDeclarations}], ${functionKeyword}(${inputArgs}) { ${wrappedContent}})`
+  const observerString = !characters.isViewOf && characters.isHidden ? '' : `observer(${nameString})`
+  const result = [`main.variable(${observerString}).define(${nameString}${name ? ', ' : ''}[${inputDeclarations}], ${functionKeyword}(${inputArgs}) { ${wrappedContent}})`]
+  if (name && characters.isViewOf) result.push(generateViewValue(name, characters.isHidden))
+  return result
 }
 
+function generateViewValue(name, hidden) {
+  const [trimmedName] = name.split(' ')
+  const observerString = hidden ? '' : `observer("${trimmedName}")`
+  return `main.variable(${observerString}).define("${trimmedName}", ["Generators", "${name}"], (G, _) => G.input(_))`
+}
+
+// ================== server side delegation
+
+// This code will eventually end up in some lib that is included in the 
+function renderFunction(targetString) {
+  return `
+  async function liveRender(value, type, options = {}) {
+    // already a DOM element so return
+    if ((value instanceof Element || value instanceof Text)) return value
+    // nothing particular to do so leave it to the default rendering
+    if (!type) return value
+
+    const target = ${targetString}
+    options = {...options, type }
+    const rendered = await renderRemote(value, options, target) 
+    if (!rendered) return value
+    if (rendered.code) return evaluateRenderer(code, rendered.options, value, options, target)
+    return generateDOM(rendered, target)
+  }
+
+  function generateDOM(spec, target) {
+    const template = document.createElement('template')
+    template.innerHTML = spec.html.trim()
+    return template.content.firstChild
+  }
+
+  async function evaluateRenderer(code, codeOptions, value, options, target) {
+    const encoded = Buffer.from(code).toString('base64');
+    const stringModule = \`data:text/javascript;base64,\${encoded}\`
+    const renderer = await import(stringModule)
+    const context = { target, options }
+    return renderer({ content: value, context })
+  }
+
+  async function renderRemote(value, options, target) {
+    const url = 'http://localhost:3000/render'
+    const contentType = options.type || deriveType(value)
+    const body = JSON.stringify({ target, url, options: { ...options, contentType }})
+    // const response = await browser.runtime.sendMessage({
+    //   fetchPlus: {
+    //     url,
+    //     options: { method: 'POST', json: true, headers: { 'Content-Type': 'application/json' }, body, ignoreHTTPStatus: false }
+    //   }
+    // })
+    const requestOptions = { method: 'POST', json: true, headers: { 'Content-Type': 'application/json' }, body, ignoreHTTPStatus: false }
+    const response = await fetch(url, requestOptions)
+    const text = await response.text()
+    const content = JSON.parse(text)
+    const { status, headers, ok } = response
+    if (ok) return { body: content, json: true, status, headers, ok }
+    throw await getError(content)
+  }`
+}
