@@ -1,5 +1,14 @@
+##TODO
+
+* make an inspector that mimics the browser extension in that it allows for pluggable rendering (if needed)
+  * The cell can compute/return the rendering, if so, the extensibility is skipped
+* add notion of hidden cells
+* add rendering such that the source is also shown
+* Define model for cell results where can include value, type, and rendering
+  * Currently value and rendering (viewof) are separate cells. Maybe that's ok?
 
 
+## NOTES
 1. notebook render is detected
 1. render request to server
 
@@ -75,17 +84,17 @@ See some thoughts from @max
 https://gist.github.com/max/738c318b17ea47f5708a53c79493bd29
 
 * Default value renderer (derived from `js`). Content type = JSON
-```\`\`\`{js(cars)}
+```\`\`\`{javascript(cars)}
 cars
 \`\`\`
 ```
 This injects code during transpilation that interprets the result and renders accordingly using built-in defaults. This is sort of like the Inspector but more sophiticated.
 
 * same as above but renders inline rather than as a block and names the value `foo`
-`{js#foo(cars)} cars`
+`{javascript#foo(cars)} cars`
 
 * barchart render of JS computed value
-```{js(cars)}[barchart(xLabel=year)]
+```{javascript(cars)}[barchart(xLabel=year)]
 cars   // returns an object (not a DOM)
 ```
 This injects code from the cited extension in to the transpiled JS that takes the computed content result and renders accordingly.
@@ -99,17 +108,17 @@ dataset
 
 
 * Dynamic renderer (the code returns a DOM)
-```{js(cars)}
+```{javascript(cars)}
 return timechart(cars,'monthly')   // returns a visual (i.e., DOM element/node)
 ```
 
 * Dynamic renderer (the code returns a DOM)
-```{js(cars)}
+```{javascript(cars)}
 // returns a value and a visual ( DOM element/node)
 return { value: cars, visual: timechart(cars,'monthly') }   
 ```
 
-```{js(bar)}
+```{javascript(bar)}
 bar[1].trim().length   // some complex thing to be evaluated server side
 ```
 

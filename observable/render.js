@@ -18,31 +18,7 @@ const yaml = require('js-yaml')
 module.exports = async ({ options, context }) => {
   const content = await context.render.getContent({})
   const code = await generate(context, content, context.target.resource)
-  console.log(code)
-  const encoded = Buffer.from(code).toString('base64');
-  const stringModule = `data:text/javascript;base64,${encoded}`
-  const { type, id, org, repo, path, ref } = context.target.resource
-  const targetString = JSON.stringify({ type, id, org, repo, path, ref })
-  const script = `
-  <script type="module">
-    import { Runtime, Inspector, Library } from "https://cdn.jsdelivr.net/npm/@observablehq/runtime@4/dist/runtime.js"
-    ${renderFunction(targetString)}
-    // console.log(browser)
-    const render = () => liveRender
-    import('${stringModule}').then(notebook => {
-      const runtime = new Runtime({...new Library(), render})
-      runtime.module(notebook.default, Inspector.into(document.body))
-      window.parent.postMessage('loaded', '*')
-    })
-  </script>`
-  const html = `
-<html>
-  <meta charset="utf-8">
-  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@observablehq/inspector@3/dist/inspector.css">
-  <body>
-  ${script.trim()}
-</html>`.trim()
-  return { html }
+  return { code }
 }
 
 function parseMarkdown(content, namespace) {
@@ -65,16 +41,18 @@ function parseFrontmatterConfig(content) {
 }
 
 function discoverMarkdownChunks(content, namespace) {
-  const matches = [...content.matchAll(/```{([\w# ]+)(?:\((.*?)\))?}(.*?)```/gms)]
+  const matches = [...content.matchAll(/```{([\w# ]+)(?:\((.*?)\))?}(?:\s*?\[([\w\/]+)(?:\((.*?)\))?\])?(.*?)```/gms)]
   let index = 0
   const result = []
   for (const match of matches) {
     const markdown = content.slice(index, match.index).trim()
     if (markdown) result.push({ type: 'md', content: markdown })
     const [type, name] = match[1].split('#')
-    const args = match[2]
-    const inputs = args ? args.split(',') : undefined
-    result.push({ type, name, inputs, content: match[3].trim() })
+    const inputs = match[2] ? match[2].split(',').map(e => e.trim()) : undefined
+    const renderer = match[3]
+    const renderArgs = match[4] ? match[4].split(',').map(e => e.trim()) : undefined
+    const code = match[5].trim()
+    result.push({ type, name, inputs, renderer, renderArgs, content: code })
     index = match.index + match[0].length
   }
   if (index !== content.length) {
@@ -172,7 +150,7 @@ function generateJavaScript(chunk, state) {
   const isAsync = chunk.content.match(/(?:^|[^\w])+await\s+/)
   const isGenerator = chunk.content.match(/(?:^|[^\w])+yield\s+/)
   const characters = { hasReturn, isAsync, isGenerator }
-  return generateVariable(name, inputs, chunk.content, undefined, characters)
+  return generateVariable(name, inputs, chunk.content, undefined, characters, chunk.renderer, chunk.renderArgs)
 }
 
 function generateImports(chunk, state) {
@@ -180,9 +158,9 @@ function generateImports(chunk, state) {
   return lines.reduce((result, line) => {
     const parsed = parseImportLine(line)
     if (parsed.module) {
-      const { name, alias, module, viewOf } = parsed
+      const { name, alias, module, isViewOf } = parsed
       const moduleEntry = getModuleEntry(module, state.modules)
-      if (isViewof) result.push(generateImport(name, alias, moduleEntry, true))
+      if (isViewOf) result.push(generateImport(name, alias, moduleEntry, true))
       result.push(generateImport(name, alias, moduleEntry))
     } else if (parsed.origin) {
       // TODO proper location resolution for imports include version/ref etc
@@ -208,18 +186,18 @@ function parseImportLine(line) {
 }
 
 function parseModuleImport(matches) {
-  const originParts = matches[1].match(/^\s?(viewof\s+)?(.+?)(?:(?:\s+as\s+(\w+))|$)/)
-  const isViewof = !!originParts[1]
-  const name = originParts[2]
-  const alias = originParts[3]
-  const module = matches[2]
-  return { name, alias, module, isViewof }
+  const originParts = matches[1].match(/^\s?(viewof\s+)?(.+?)(?:(?:\s+as\s+(?:viewof\s+)?(\w+))|$)/)
+  const isViewOf = !!originParts[1]
+  const name = originParts[2].trim()
+  const alias = originParts[3] ? originParts[3].trim() : null
+  const module = matches[2].trim()
+  return { name, alias, module, isViewOf }
 }
 
 function parseLoadImport(matches) {
   const spec = null  // TODO this will be the JSONpath spec to the value in the origin to assign to the alias
-  const alias = matches[1]
-  const origin = matches[2]
+  const alias = matches[1].trim()
+  const origin = matches[2].trim()
   return { spec, alias, origin }
 }
 
@@ -233,8 +211,8 @@ function getModuleEntry(name, list) {
 }
 
 function generateImport(name, alias, module, isViewOf) {
-  const nameString = isViewof ? `viewof ${name}` : name
-  const aliasString = alias ? (isViewof ? `"viewof ${alias}", ` : `"${alias}", `) : ''
+  const nameString = isViewOf ? `viewof ${name}` : name
+  const aliasString = alias ? (isViewOf ? `"viewof ${alias}", ` : `"${alias}", `) : ''
   return `
 main.import("${nameString}", ${aliasString}child${module.alias})`
 }
@@ -243,74 +221,34 @@ function analyzeJS(chunk, state) {
   return { implicitInputs: [] }
 }
 
-function generateVariable(name, inputs, content, type, characters = {}) {
-  const templatedContent = type ? `${type}\`${content.trim()}\`` : content.trim()
-  const wrappedContent = characters.hasReturn || characters.isGenerator ? `\n  ${templatedContent}\n` : `return (\n  ${templatedContent}\n)`
+function generateVariable(name, inputs, content, type, characters = {}, renderer, renderOptions) {
+  const wrappedCode = generateWrappedCode(content, type, characters, renderer, renderOptions)
+  if (renderer && !inputs.includes('render')) inputs = [...inputs, 'render']
   const inputDeclarations = inputs.map(entry => `"${entry}"`).join(', ')
   const inputArgs = inputs.map(i => i.replace(/ /g, '_')).join(', ')
   const nameString = name ? `"${name}"` : ''
   const functionKeyword = `${characters.isAsync ? 'async ' : ''}function${characters.isGenerator ? '*' : ''}`
   const observerString = !characters.isViewOf && characters.isHidden ? '' : `observer(${nameString})`
-  const result = [`main.variable(${observerString}).define(${nameString}${name ? ', ' : ''}[${inputDeclarations}], ${functionKeyword}(${inputArgs}) { ${wrappedContent}})`]
+  const result = [`main.variable(${observerString}).define(${nameString}${name ? ', ' : ''}[${inputDeclarations}], ${functionKeyword}(${inputArgs}) { ${wrappedCode}})`]
   if (name && characters.isViewOf) result.push(generateViewValue(name, characters.isHidden))
   return result
+}
+
+function generateWrappedCode(content, type, characters, renderer, renderOptions) {
+  const templatedContent = type ? `${type}\`${content.trim()}\`` : content.trim()
+  const wrappedContent = characters.hasReturn || characters.isGenerator ? `\n  ${templatedContent}\n` : `return (\n  ${templatedContent}\n)`
+  if (!renderer) return wrappedContent
+  return `
+    const _content = (() => {
+      ${wrappedContent}
+    })()
+    const _renderOptions = ${renderOptions}
+    return render(_content, "${renderer}", _renderOptions)
+`
 }
 
 function generateViewValue(name, hidden) {
   const [trimmedName] = name.split(' ')
   const observerString = hidden ? '' : `observer("${trimmedName}")`
   return `main.variable(${observerString}).define("${trimmedName}", ["Generators", "${name}"], (G, _) => G.input(_))`
-}
-
-// ================== server side delegation
-
-// This code will eventually end up in some lib that is included in the 
-function renderFunction(targetString) {
-  return `
-  async function liveRender(value, type, options = {}) {
-    // already a DOM element so return
-    if ((value instanceof Element || value instanceof Text)) return value
-    // nothing particular to do so leave it to the default rendering
-    if (!type) return value
-
-    const target = ${targetString}
-    options = {...options, type }
-    const rendered = await renderRemote(value, options, target) 
-    if (!rendered) return value
-    if (rendered.code) return evaluateRenderer(code, rendered.options, value, options, target)
-    return generateDOM(rendered, target)
-  }
-
-  function generateDOM(spec, target) {
-    const template = document.createElement('template')
-    template.innerHTML = spec.html.trim()
-    return template.content.firstChild
-  }
-
-  async function evaluateRenderer(code, codeOptions, value, options, target) {
-    const encoded = Buffer.from(code).toString('base64');
-    const stringModule = \`data:text/javascript;base64,\${encoded}\`
-    const renderer = await import(stringModule)
-    const context = { target, options }
-    return renderer({ content: value, context })
-  }
-
-  async function renderRemote(value, options, target) {
-    const url = 'http://localhost:3000/render'
-    const contentType = options.type || deriveType(value)
-    const body = JSON.stringify({ target, url, options: { ...options, contentType }})
-    // const response = await browser.runtime.sendMessage({
-    //   fetchPlus: {
-    //     url,
-    //     options: { method: 'POST', json: true, headers: { 'Content-Type': 'application/json' }, body, ignoreHTTPStatus: false }
-    //   }
-    // })
-    const requestOptions = { method: 'POST', json: true, headers: { 'Content-Type': 'application/json' }, body, ignoreHTTPStatus: false }
-    const response = await fetch(url, requestOptions)
-    const text = await response.text()
-    const content = JSON.parse(text)
-    const { status, headers, ok } = response
-    if (ok) return { body: content, json: true, status, headers, ok }
-    throw await getError(content)
-  }`
 }
