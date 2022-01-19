@@ -15,9 +15,9 @@ const yaml = require('js-yaml')
  * (or output) list.
 */
 
-module.exports = async ({ options, context }) => {
-  const content = await context.render.getContent({})
-  const code = await generate(context, content, context.target.resource)
+module.exports = async ({ helpers, render }) => {
+  const content = await render.getContent({})
+  const code = await generate(helpers.octokit, content, render.filesSpec)
   return { code }
 }
 
@@ -62,9 +62,9 @@ function discoverMarkdownChunks(content, namespace) {
   return result
 }
 
-async function generate(context, content, resource, level) {
+async function generate(octokit, content, resource, level) {
   const { chunks } = parseMarkdown(content)
-  const state = createState(context, resource, level)
+  const state = createState(octokit, resource, level)
   const code = generateBody(chunks, state)
   const preamble = await generatePreamble(state)
   const postamble = generatePostamble()
@@ -90,16 +90,17 @@ ${importedModules
 
 function captureImportedModules(state) {
   return Promise.all(state.modules.map(async (imported) => {
-    const resolved = state.context.github.resolve(imported.name, state.current)
-    const content = await getModuleContent(resolved, state.context)
+    const resolved = state.octokit.resolve(imported.name, state.current)
+    const content = await getModuleContent(resolved, state.octokit)
     const unique = state.level + imported.alias
-    const generated = await generate(state.context, content, resolved, unique)
+    const generated = await generate(state.octokit, content, resolved, unique)
     return { code: generated.trim(), unique }
   }))
 }
 
-function getModuleContent(location, context) {
-  return context.render.getContent(location)
+function getModuleContent(location, octokit) {
+  const response = octokit.repos.getContent(location)
+  return Buffer.from(response.data.content, 'base64').toString('utf8')
 }
 
 function generatePostamble() {
@@ -108,8 +109,8 @@ function generatePostamble() {
 }`
 }
 
-function createState(context, resource, level) {
-  return { context, current: resource || context.target.resource, modules: [], level: level || '' }
+function createState(octokit, resource, level) {
+  return { octokit, current: resource, modules: [], level: level || '' }
 }
 
 const generators = {
