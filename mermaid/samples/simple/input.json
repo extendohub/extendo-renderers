@@ -27,24 +27,24 @@
       }
     },
     "target": {
-      "url": "https://github.com/app-extensions/test/blob/main/?raw=true",
+      "url": "https://github.com/extendohub/demo/blob/main/?raw=true",
       "resource": {
         "type": 3,
         "id": 344714955,
-        "owner": "app-extensions",
+        "owner": "extendohub",
         "repo": "test",
         "path": ""
       },
       "file": {
-        "owner": "app-extensions",
+        "owner": "extendohub",
         "repo": "test",
         "path": ""
       },
       "repo": {
-        "owner": "app-extensions",
+        "owner": "extendohub",
         "repo": "test"
       },
-      "org": "app-extensions",
+      "org": "extendohub",
       "getContent": {
         "__marker": "deadbeef",
         "type": "function",
@@ -55,7 +55,7 @@
         "type": "rest",
         "base": "repos.getContent",
         "defaults": {
-          "owner": "app-extensions",
+          "owner": "extendohub",
           "repo": "test",
           "path": ""
         }
@@ -67,7 +67,7 @@
       "resource": {
         "type": 3,
         "id": 344714955,
-        "org": "app-extensions",
+        "org": "extendohub",
         "repo": "test",
         "path": ""
       },

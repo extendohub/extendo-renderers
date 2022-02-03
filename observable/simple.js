@@ -8,7 +8,7 @@ const test = async () => {
       getContent: (spec) => fs.readFileSync(`./${spec.path || 'simple.md'}`).toString(),
       target: {
         resource: {
-          owner: 'app-extensions', repo: 'test', path: 'simple.md', ref: 'main'
+          owner: 'extendohub', repo: 'test', path: 'simple.md', ref: 'main'
         }
       }
     },
@@ -21,7 +21,7 @@ const test = async () => {
         },
         resolve: () => {
           return {
-            owner: 'app-extensions', repo: 'test', path: 'scatter.md', ref: 'main'
+            owner: 'extendohub', repo: 'test', path: 'scatter.md', ref: 'main'
           }
         }
       }

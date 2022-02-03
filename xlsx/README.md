@@ -8,7 +8,7 @@ name: Excel spreadsheet rendering
 description: Render XLSX files
 render:
   file:
-    uses: app-extensions/extendo-renderers/xlsx/xlsx.js
+    uses: extendohub/extendo-renderers/xlsx/xlsx.js
 ```
 
 There are currently no configuration inputs for this renderer.

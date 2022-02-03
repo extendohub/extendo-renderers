@@ -20,14 +20,14 @@
     "target": {
       "url": {
         "type": "prop",
-        "value": "https://github.com/app-extensions/test/blob/main/math.md?raw=true"
+        "value": "https://github.com/extendohub/demo/blob/main/math.md?raw=true"
       },
       "resource": {
         "type": "prop",
         "value": {
           "type": 3,
           "id": 344714955,
-          "owner": "app-extensions",
+          "owner": "extendohub",
           "repo": "test",
           "path": "math.md",
           "ref": "main"
@@ -36,7 +36,7 @@
       "repo": {
         "type": "prop",
         "value": {
-          "owner": "app-extensions",
+          "owner": "extendohub",
           "repo": "test"
         }
       },
@@ -48,7 +48,7 @@
         "type": "rest",
         "base": "repos.getContent",
         "defaults": {
-          "owner": "app-extensions",
+          "owner": "extendohub",
           "repo": "test",
           "path": "math.md",
           "ref": "main"
@@ -72,7 +72,7 @@
     }
   },
   "target": {
-    "owner": "app-extensions",
+    "owner": "extendohub",
     "repo": "test",
     "path": "math.md",
     "ref": "main"
