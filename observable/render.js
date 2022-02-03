@@ -50,7 +50,7 @@ function discoverMarkdownChunks(content, namespace) {
     const [type, name] = match[1].split('#')
     const inputs = match[2] ? match[2].split(',').map(e => e.trim()) : undefined
     const renderer = match[3]
-    const renderArgs = match[4] ? match[4].split(',').map(e => e.trim()) : undefined
+    const renderArgs = parseKeyValuePairs(match[4] ? match[4].split(',').map(e => e.trim()) : [])
     const code = match[5].trim()
     result.push({ type, name, inputs, renderer, renderArgs, content: code })
     index = match.index + match[0].length
@@ -60,6 +60,14 @@ function discoverMarkdownChunks(content, namespace) {
     if (markdown) result.push({ type: 'md', content: markdown })
   }
   return result
+}
+
+function parseKeyValuePairs(spec) {
+  return spec.reduce((result, pair) => {
+    const [key, value] = pair.trim().split('=')
+    if (key) result[key] = value
+    return result
+  }, {})
 }
 
 async function generate(octokit, content, resource, level) {
@@ -243,7 +251,7 @@ function generateWrappedCode(content, type, characters, renderer, renderOptions)
     const _content = (() => {
       ${wrappedContent}
     })()
-    const _renderOptions = ${renderOptions}
+    const _renderOptions = ${JSON.stringify(renderOptions)}
     return render(_content, "${renderer}", _renderOptions)
 `
 }
