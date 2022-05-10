@@ -1,0 +1,5 @@
+{
+  "inputs": {
+    "content": { "owner": "extendohub", "repo": "extendo-render-app", "path": "mermaid/samples/structure/structure.mmd" }
+  }
+}

@@ -1,3 +1,8 @@
+Renderer for Github Live Markdown
+
+This code is ncc'd and then installed as .github/render/github/live.js
+
+
 ##TODO
 
 * make an inspector that mimics the browser extension in that it allows for pluggable rendering (if needed)

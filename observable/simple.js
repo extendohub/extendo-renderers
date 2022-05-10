@@ -5,10 +5,10 @@ const test = async () => {
   const params = {
     context: {},
     render: {
-      getContent: (spec) => fs.readFileSync(`./${spec.path || 'five-minute.md'}`).toString(),
+      getContent: (spec) => fs.readFileSync(`./${spec.path || 'simple.md'}`).toString(),
       target: {
         resource: {
-          owner: 'extendohub', repo: 'test', path: 'five-minute.md', ref: 'main'
+          owner: 'extendohub', repo: 'test', path: 'simple.md', ref: 'main'
         }
       }
     },
@@ -29,6 +29,6 @@ const test = async () => {
     inputs: {}
   }
   const rendered = await render(params)
-  fs.writeFileSync('./output.html', rendered.html)
+  console.log(rendered.code)
 }
 test()

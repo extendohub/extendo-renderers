@@ -1,8 +1,8 @@
 {
-  "name": "extendo-render-js",
+  "name": "extendo-render-math",
   "version": "0.0.1",
-  "description": "Minified JS rendering for GitHub",
-  "main": "js.js",
+  "description": "Math rendering extenions for GitHub",
+  "main": "math.js",
   "scripts": {
     "build": "ncc build -m",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -18,6 +18,6 @@
   },
   "homepage": "https://github.com/extendohub/extendo-render#readme",
   "dependencies": {
-    "js-beautify": "^1.13.5"
+    "mathjax-full": "^3.1.2"
   }
 }
