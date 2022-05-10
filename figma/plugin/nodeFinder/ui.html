@@ -1,0 +1,23 @@
+<!-- <h3 style="font-family: sans-serif;">Embed in GitHub</h3> -->
+<textarea id="selection" readonly rows="11" cols="33" placeholder="Select node, click here, copy/paste content into GitHub markdown files or code comments"></textarea>
+<script>
+
+  let sequence = 0
+  document.getElementById('selection').onclick = () => {
+    parent.postMessage({ pluginMessage: { type: 'getSelection', sequence: ++sequence } }, '*')
+  }
+
+  onmessage = event => {
+    let message = event.data.pluginMessage
+    if (message.sequence !== sequence) return
+    if (message.selection.length === 0) return 
+    const selection = message.selection[0].id
+    const textarea = document.getElementById("selection")
+    const result = `
+\`\`\`application/figma
+https://figma.com/file/${message.file}?node-id=${selection}
+\`\`\``
+    textarea.value = result.trim()
+  }
+
+</script>

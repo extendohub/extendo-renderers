@@ -1,0 +1,8 @@
+{
+  "name": "nodeFinder",
+  "id": "989227027958373056",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "enablePrivatePluginApi": true 
+}
