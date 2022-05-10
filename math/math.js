@@ -11,10 +11,6 @@ const { RegisterHTMLHandler } = _RegisterHTMLHandler
 import _AllPackages from 'mathjax-full/js/input/tex/AllPackages.js'
 const { AllPackages } = _AllPackages
 
-// TODO need to add this here as someone's using it and `ncc` seems not to bring that code in. 
-import URL from 'url'
-const foo = URL
-
 export default async ({ render }) => {
   const content = await render.getContent({}, 'utf8')
   const adaptor = liteAdaptor()
