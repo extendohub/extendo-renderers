@@ -19,6 +19,6 @@
   },
   "homepage": "https://github.com/extendohub/extendo-render#readme",
   "dependencies": {
-    "mathjax-full": "^3.1.2"
+    "mathjax-full": "^3.2.0"
   }
 }
